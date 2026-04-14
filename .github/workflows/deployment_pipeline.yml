@@ -14,12 +14,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Install backend dependencies
-        run: npm install
+        run: npm ci
         working-directory: ./backend
 
       - name: Install frontend dependencies
-        run: npm install
+        run: npm ci
         working-directory: ./frontend
 
       - name: Run backend lint
@@ -45,63 +50,3 @@ jobs:
       - name: Show commit messages
         if: ${{ github.event_name == 'push' }}
         run: echo "${{ join(github.event.commits.*.message, ' | ') }}"
-
-  tag_release:
-    needs: [build_and_test]
-    if: ${{ github.event_name == 'push' && !contains(join(github.event.commits.*.message, ' '), '#skip') }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    outputs:
-      new_tag: ${{ steps.bump_tag.outputs.new_tag }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Bump version and push tag
-        id: bump_tag
-        uses: anothrNick/github-tag-action@4ed44965e0db8dab2b466a16da04aec3cc312fd8
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEFAULT_BUMP: patch
-
-  notify_success:
-    needs: [tag_release]
-    if: ${{ needs.tag_release.result == 'success' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notify Discord about successful release
-        uses: sarisia/actions-status-discord@v1
-        if: always()
-        with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          status: success
-          nodetail: true
-          title: "New version deployed"
-          description: |
-            Repository: `${{ github.repository }}`
-            Branch: `${{ github.ref_name }}`
-            Version: `${{ needs.tag_release.outputs.new_tag }}`
-            Commit: `${{ github.sha }}`
-            Actor: `${{ github.actor }}`
-
-  notify_failure:
-    needs: [build_and_test]
-    if: ${{ failure() }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notify Discord about failed build
-        uses: sarisia/actions-status-discord@v1
-        if: always()
-        with:
-          webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          status: failure
-          title: "Build failed"
-          description: |
-            Repository: `${{ github.repository }}`
-            Workflow: `${{ github.workflow }}`
-            Branch: `${{ github.ref_name }}`
-            Commit: `${{ github.sha }}`
-            Author: `${{ github.actor }}`
-            Run: `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`
